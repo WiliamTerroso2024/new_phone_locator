@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Localização do Dispositivo</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        /* Estilo básico para o mapa */
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+        /* Estilo do contêiner de endereço */
+        #device-address {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Localização do Dispositivo</h1>
+
+    <!-- Mapa -->
+    <div id="map"></div>
+
+    <!-- Endereço -->
+    <div id="device-address">Carregando localização...</div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Configurações do sistema
+        const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI0YjNhOWYyZDhmOTQ0NWVkYWVjYjllNTVhMzUzODRmMiIsImlhdCI6MTczMzA0ODg5OSwiZXhwIjoyMDQ4NDA4ODk5fQ.OepnustxxO83z6aWCNPAZG7q_a4LvxmNBmZ-j9L9NFE";
+        const url = "http://206.42.5.159:8124/api/states/device_tracker.2312dra50g"; // ID do dispositivo
+
+        // Elemento onde o endereço será exibido
+        const addressElement = document.getElementById("device-address");
+
+        // Função para inicializar o mapa
+        let map;
+        let marker;
+
+        function initializeMap(latitude, longitude) {
+            console.log("Inicializando mapa com as coordenadas:", latitude, longitude);
+            map = L.map('map').setView([latitude, longitude], 13);
+
+            // Adiciona o tileLayer do OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Cria o marcador no mapa
+            marker = L.marker([latitude, longitude]).addTo(map);
+        }
+
+        // Função para buscar a localização do dispositivo no Home Assistant
+        async function fetchDeviceLocation() {
+            try {
+                // Consulta ao Home Assistant para obter os dados do dispositivo
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                // Verifica se a resposta foi bem-sucedida
+                if (!response.ok) {
+                    throw new Error("Erro ao obter os dados do dispositivo.");
+                }
+
+                const data = await response.json();
+
+                // Extrai latitude e longitude do dispositivo
+                const latitude = data.attributes.latitude;
+                const longitude = data.attributes.longitude;
+
+                console.log("Latitude:", latitude, "Longitude:", longitude);
+
+                // Faz uma consulta para obter o endereço via API de geocodificação (OpenStreetMap)
+                const geocodeResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`);
+                const geocodeData = await geocodeResponse.json();
+
+                // Exibe o endereço completo na interface
+                const addressComponents = geocodeData.address;
+
+                const address = `
+                    <strong>Endereço do dispositivo:</strong><br>
+                    ${addressComponents.house_number ? addressComponents.house_number + ', ' : ''} 
+                    ${addressComponents.road ? addressComponents.road + ', ' : ''}
+                    ${addressComponents.suburb ? addressComponents.suburb + ', ' : ''}
+                    ${addressComponents.city ? addressComponents.city + ', ' : ''}
+                    ${addressComponents.state ? addressComponents.state + ', ' : ''}
+                    ${addressComponents.postcode ? addressComponents.postcode + ' - ' : ''}
+                    ${addressComponents.country || 'País não disponível'}`;
+
+                addressElement.innerHTML = address;
+
+                // Inicializa o mapa com a posição do dispositivo
+                initializeMap(latitude, longitude);
+
+            } catch (error) {
+                // Em caso de erro, exibe uma mensagem
+                addressElement.textContent = "Erro ao carregar o endereço do dispositivo.";
+                console.error(error);
+            }
+        }
+
+        // Executa a função ao carregar a página
+        fetchDeviceLocation();
+    </script>
+</body>
+</html>
